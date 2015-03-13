@@ -1,0 +1,30 @@
+pirsyncd stands for: Python Inotify Rsync Daemon
+
+http://ebalaskas.gr/blog/?page=pirsyncd
+
+pyinotify.py is from: http://trac.dbzteam.org/pyinotify/wiki
+stable version 0.8.8 (02-Nov-2009)
+
+If you want to see what pyinotify monitors, try this: 
+	python -m pyinotify -r /tmp
+
+Known Issue:
+	Missed events when kernel inotify stack overflow
+
+To see the max queued events:
+	cat /proc/sys/fs/inotify/max_queued_events
+
+How to fix it:
+	echo 32768 > /proc/sys/fs/inotify/max_queued_events
+
+A mini presentantion is here: 
+	http://ebalaskas.gr/pirsyncd/pyinotify.tbz
+
+A FAQ page (mostly in greek) is here:
+	http://ebalaskas.gr/wiki/pirsyncd
+
+Before you start run:
+
+./pirsyncd -h
+&
+./pirsyncd --examples

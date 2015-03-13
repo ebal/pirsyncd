@@ -1,0 +1,104 @@
+TODO
+----------
+
+01: When a rsync is running i miss all the inotify events (to prevent
+	multiple rsync commands) and new files dont copied to the dest dir.
+
+fixed
+
+02: What would happen when a lot of big files are been written in short 
+	time to the watced directory ?
+
+	IN_Q_OVERFLOW flag set value 1
+
+03: Change getopt to optparse
+
+fixed
+
+04: Add functionality to reload PIrsyncD (stop/status)
+
+fixed
+
+05: Logging
+
+fixed
+
+06: Excludes, Add functionality to exclude files from synchronization
+
+fixed for Max-Size & Min-Size
+
+07. Debugging PyInotify Events
+
+fixed
+(logging python module)
+
+08. When using --host is in use, checking destination directory isnt necessary 
+(Suggested by Jeff Templon < templon _AT_ nikhef _DOT_ nl >)
+
+fixed
+
+09. Append Functionality
+(Suggested by Jeff Templon < templon _AT_ nikhef _DOT_ nl >)
+
+fixed
+
+10: rsync version 2 does not support --log-file 
+(Suggested by Jeff Templon < templon _AT_ nikhef _DOT_ nl >)
+
+fixed
+
+11. PIrsyncD agains rsync daemon
+Based on Jeff Templon's patch
+(Suggested by Jeff Templon < templon _AT_ nikhef _DOT_ nl >)
+
+fixed
+
+12. multiple instances of PIrsyncD
+Based on Jeff Templon & Jan Just Keijser's patch
+(Jeff Templon < templon _AT_ nikhef _DOT_ nl > and Jan Just Keijser < janjust _AT_ nikhef _DOT_ nl >)
+
+fixed
+
+13. Python Code Styling
+
+fixed (pylint)
+
+14. Add Python version 3 based PIrsyncD
+
+fixed (PIrsyncD.v3)
+
+15. Duplicate inode events
+
+fixed
+
+16. Delay for rsync command - aka counter for inode events
+
+Fixed
+Based on Bryan's question - Bryan Seitz < seitz _AT_ bsd-unix _DOT_ net >
+
+17. Add ssh port parameter
+
+Fixed
+Based on Fred's question - Fred Warren < fred _DOT_ warren _AT_ gmail _DOT_ com >
+
+Not Fixed:
+----------
+
+01: exclude patterns
+
+From rsync & Pyinotify
+
+Fixed partial - only pattern NOT file list
+
+02: Init Script
+
+03: Packaging
+
+04: The optparse module is deprecated since version 2.7
+
+05: Spit Configuration from mail code file
+
+06: Test pirsyncd.Py3k functionality
+
+07. Check for deprecated functions and modules
+

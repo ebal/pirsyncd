@@ -1,0 +1,541 @@
+#!/usr/bin/env python
+
+"""
+pirsyncd stands for: Python Inotify Rsync Daemon
+
+This is an attempt of writing a daemon to watch a directory for kernel's inotify
+events and then execute an rsync command to synchronize two different
+directories (local or remote). This is a poor man's mirroring or an alternative
+(not so) real data replication mechanism and it is based on Pyinotify.
+
+Copyright (c) Evaggelos Balaskas (2009, 2010, 2011)
+"""
+
+import os
+import subprocess
+import optparse
+import sys
+import socket
+import fileinput
+import signal
+import logging
+import re
+
+try:
+    import pyinotify3
+except ImportError as strerror:
+    print("\nThere was an error: %s\n" % (strerror))
+    print("You have to install pyinotify, http://trac.dbzteam.org/pyinotify\n")
+    sys.exit(1)
+
+# Version of pirsyncd
+VERSION = "20110412"
+
+# Default Directories (Source & Destination Folder Paths)
+SOURCE_PATH = "/tmp/data/"
+DEST_PATH   = "/tmp/data2/"
+
+# rsync variables
+RSYNC_PATH    = "/usr/bin/rsync"
+RSYNC_ARGS    = "-azqx --delete-after --partial --safe-links"
+RSYNC_COMMAND = ""
+RSYNC_APPEND  = False
+RSYNC_V2      = False
+RSYNC_LOG     = "/tmp/.pirsyncd.log"
+DEBUG_LOG     = "/tmp/.pirsyncdebug"
+FOREGROUND    = False
+MAX_SIZE      = ""
+MIN_SIZE      = ""
+EXCLUDE_PAT   = ""
+
+# destination server (rsync over ssh)
+DEST_SERVER = False
+DEST_PORT   = "22"
+
+# destination server runs: rsync --daemon
+RSYNC_DAEMON    = False
+RSYNC_PASS_FILE = False
+
+# This file contains the pid of the running pirsyncd
+PIDFILE  = "/tmp/.pirsyncd.pid"
+
+# ! DONT change this unless you know what you are doing !
+# Read Events after n seconds. Value 0 (zero) is for immediately read
+FREQ = 0
+# You can configure pirsyncd to run every N inode events, be carefull!
+INODES = COUNTER = 3
+# Dictionary varialbe to store files & events
+EVENTS = {}
+
+FIRST_TIME = True
+
+# Description message for help
+DESC_MSG = """This is an attempt of writing a daemon to watch a directory for\
+ kernel's inotify events and then execute an rsync command to synchronize two \
+different directories (local or remote). This is a poor man's mirroring or an \
+alternative (not so) real data replication mechanism (based on Pyinotify).
+"""
+
+# Usage message for help
+USAGE_MSG = "pirsyncd \
+[ -s <source> ] [ -d <destination> ] [ -p <pidfile> ] \n\t\t\
+[ -r <rsync> ] [ -l <log>] [ --nolog] \n\t\t\
+[ --debug=debug_log ] [ --nodebug ] \n\t\t\
+[ --rsync_append ] [ --rsync_v2 ] \n\t\t\
+[ --host=dest_server ] [ --port=dest_port ] \n\t\t\
+[ --max_size ] [ --min_size ] \n\t\t\
+[ --rsync_daemon=rsync_daemon --rsync_pass_file=rsync_pass_file ]\n\t\t\
+[ --exclude_pattern=pattern] [ -f <foreground> ]\n\t\t\
+[ -h <help> ] [ -v <version> ] [ -k stop/status ]"
+
+# Example messages for help
+EXAMPLE_MSG = """
+Below are many pirsyncd examples that you can use.
+./pirsyncd -h
+
+./pirsyncd -v
+
+./pirsyncd
+
+./pirsyncd -s /tmp/data/ -d /tmp/data2/
+
+./pirsyncd -r /usr/local/bin/rsync
+
+./pirsyncd -l /tmp/pirsyncd.log
+
+./pirsyncd --nolog
+
+./pirsyncd --debug /tmp/pirsyncdebug
+
+./pirsyncd --nodebug
+
+./pirsyncd --rsync_append
+
+./pirsyncd --rsync_v2
+
+./pirsyncd -s /tmp/data/ -d /tmp/data2/ --host ssh.example.com
+
+./pirsyncd --host ssh.example.com --port 2222
+
+./pirsyncd --rsync_daemon=rsync.example.com::data --rsync_pass_file=/etc/rsyncd.secrets
+
+./pirsyncd --max_size 100m
+
+./pirsyncd --min_size 10k
+
+./pirsyncd --exclude_pattern=var/tmp
+
+./pirsyncd -k stop
+
+./pirsyncd -k status
+
+./pirsyncd -f
+
+./pirsyncd -p /tmp/.pirsyncd.pid2
+
+./pirsyncd --nodebug --nolog -s /tmp/data3/ -d /tmp/data4/ -p /tmp/.pirsyncd.pid2
+
+When you are using a different pidfile, always declare it before action (-k stop/status)
+./pirsyncd -p /tmp/.pirsyncd.pid2 -k status
+
+./pirsyncd -p /tmp/.pirsyncd.pid2 -k stop
+
+Read FAQ: http://ebalaskas.gr/wiki/pirsyncd"""
+
+def check_config(check = True):
+    """ Validate the configuration of pirsyncd"""
+    if os.path.exists(PIDFILE):
+        print("There is already a pid file " + PIDFILE)
+        print("Perhaps there is a running pirsyncd instance already!")
+        check = False
+    if not os.path.exists(SOURCE_PATH):
+        print("There isn't any (source directory): " + SOURCE_PATH)
+        check = False
+    if not os.path.exists(RSYNC_PATH):
+        print("There isn't any : " + RSYNC_PATH)
+        check = False
+    # Both RSYNC_DAEMON & RSYNC_PASS_FILE arguments must have values.
+    if RSYNC_DAEMON != False :
+        if RSYNC_PASS_FILE is False :
+            print("--rsync_daemon is enabled only with --rsync_pass_file. \
+fallback to sync on local destination")
+            check = False
+    if RSYNC_PASS_FILE != False :
+        if RSYNC_DAEMON is False :
+            print("--rsync_pass_file is enabled only with --rsync_daemon. \
+fallback to sync on local destination")
+            check = False
+    if DEST_SERVER != False :
+        try:
+            socket.inet_aton(socket.gethostbyname(DEST_SERVER))
+        except socket.error:
+            print("This isnt a valid Host Name : " + DEST_SERVER)
+            check = False
+    elif RSYNC_DAEMON != False and RSYNC_PASS_FILE != False :
+        # Valid is something like this: rsync.example.com::data
+        rsd = re.match (r'^([a-zA-Z0-9-.]+):{2}([a-zA-Z0-9]+$)', RSYNC_DAEMON)
+        if ( rsd != None ) :
+            try:
+                socket.inet_aton(socket.gethostbyname(rsd.group(1)))
+            except socket.error:
+                print("This isnt a valid Host Name : " + rsd.group(1))
+                check = False
+        else :
+            print("rsync_daemon: " +  RSYNC_DAEMON + ", isnt a valid argument. \
+You must type something like this: rsync.example.com::data")
+            check = False
+        if not os.path.exists(RSYNC_PASS_FILE):
+            print("There isn't any : " + RSYNC_PASS_FILE)
+            check = False
+    else :
+        if not os.path.exists(DEST_PATH):
+            print("There isn't any (destination directory): " + DEST_PATH)
+            check = False
+    return check
+
+class PTmp(pyinotify3.ProcessEvent):
+    """ Handles the pyinotify3 events """
+
+    def process_default(self, event):
+        """ Default procudure is to debug and sychronize """
+        
+        # Dont rsync for duplicates events!
+        if (EVENTS.get(event.pathname.replace("/", "_")) != event.maskname):
+            EVENTS [ event.pathname.replace("/", "_") ] = event.maskname
+            cur_event = event.maskname + event.pathname.replace("/", "_")
+            # Debugging
+            logging.debug('pirsyncd: ' + cur_event)
+            # Synchronization
+            mirror()
+
+def getarguments():
+    """ Getting user arguments """
+    parser = optparse.OptionParser(USAGE_MSG, description=DESC_MSG)
+    parser.add_option("-v", "--version",
+        action="callback",
+        callback=my_version,
+        help="Print version and exit")
+    parser.add_option("-s", "--source",
+        action="store",
+        type="string",
+        dest="SOURCE_PATH",
+        default=SOURCE_PATH,
+        help="This is the source (watched) directory,\t\t(default value: \
+/tmp/data/).")
+    parser.add_option("-d", "--destination",
+        action="store",
+        type="string",
+        dest="DEST_PATH",
+        default=DEST_PATH,
+        help="This is the destination (to sync) directory,\t\t(default value: \
+/tmp/data2/).")
+    parser.add_option("-p", "--pidfile",
+        action="store",
+        type="string",
+        dest="PIDFILE",
+        default=PIDFILE,
+        help="Full path of file contains the PID of the running instance. \
+(default value: /tmp/.pirsyncd.pid)\t\tThis is very usefull for running \
+multiple instances of pirsyncd so you should be very carefull with --debug and \
+--log arguments! See --examples")
+    parser.add_option("-r", "--rsync",
+        action="store",
+        type="string",
+        dest="RSYNC_PATH",
+        default=RSYNC_PATH,
+        help="Full path of rsync command.\t\t\t(default value: /usr/bin/rsync)")
+    parser.add_option("-l", "--log",
+        action="store",
+        type="string",
+        dest="RSYNC_LOG",
+        default=RSYNC_LOG,
+        help="Full path of rsync log file.\t\t\t(default value: \
+/tmp/.pirsyncd.log).")
+    parser.add_option("--nolog",
+        action="store_const",
+        const="/dev/null",
+        dest="RSYNC_LOG",
+        help="Disable rsync logging")
+    parser.add_option("-f", "--foreground",
+        action="store_true",
+        default="False",
+        dest="FOREGROUND",
+        help="Dont put the pirsyncd in background")
+    parser.add_option("--debug",
+        action="store",
+        type="string",
+        dest="DEBUG_LOG",
+        default=DEBUG_LOG,
+        help="Full path of pirsyncd debug log file.\t\t\t(default value: \
+/tmp/.pirsyncdebug).")
+    parser.add_option("--nodebug",
+        action="store_const",
+        const="/dev/null",
+        dest="DEBUG_LOG",
+        help="Disable pirsyncd debugging")
+    parser.add_option("--rsync_append",
+        action="store_true",
+        default="False",
+        help="Enable rsync append functionality")
+    parser.add_option("--rsync_v2",
+        action="store_true",
+        default="False",
+        help="Disable rsync version 3 functionality (eg. log-file)")
+    parser.add_option("--host",
+        action="store",
+        type="string",
+        dest="DEST_SERVER",
+        default=DEST_SERVER,
+        help="Enable rsync over ssh. You must define a destination server \
+(IP Address) with passwordless connection.")
+    parser.add_option("--port",
+        action="store",
+        type="string",
+        dest="DEST_PORT",
+        default=DEST_PORT,
+        help="Define the destination ssh port, only with --host")
+    parser.add_option("--rsync_daemon",
+        action="store",
+        type="string",
+        dest="RSYNC_DAEMON",
+        default=RSYNC_DAEMON,
+        help="Enable rsync over native rsync protocol.\t\tValid argument is of \
+form host::module.\t\t\tIf --host is set, then --RSYNC_DAEMON is disable.")
+    parser.add_option("--rsync_pass_file",
+        action="store",
+        type="string",
+        dest="RSYNC_PASS_FILE",
+        default=RSYNC_PASS_FILE,
+        help="Name of password file to be used in combination with rsync daemon\
+ mode (--rsync_daemon).")
+    parser.add_option("--max_size",
+        action="store",
+        type="string",
+        dest="MAX_SIZE",
+        default=MAX_SIZE,
+        help="Exclude files larger than this size from synchronization \
+proccess.")
+    parser.add_option("--min_size",
+        action="store",
+        type="string",
+        dest="MIN_SIZE",
+        default=MIN_SIZE,
+        help="Exclude files smaller than this size from synchronization \
+proccess.")
+    parser.add_option("--exclude_pattern",
+        action="store",
+        type="string",
+        dest="EXCLUDE_PAT",
+        default=EXCLUDE_PAT,
+        help="Exclude pattern from rsync and pyinotify3 watch.")
+    parser.add_option("--examples",
+        action="callback",
+        callback=my_examples,
+        help="Print a list of PIrsynD usage examples and exit")
+    parser.add_option("-k",
+        action="callback",
+        type="string",
+        dest="ACTION",
+        callback=my_action,
+        help="With -k stop you stop the pirsyncd.\t\t\tWith -k status you can \
+check the status of PIryncD.")
+    (options, args) = parser.parse_args()
+    return options
+
+def version():
+    """ Print version info """
+    print("You are running pirsyncd: " + VERSION)
+    print("Copyright (c) Evaggelos Balaskas (2009, 2010, 2011)")
+    print("Licenced under GNU General Public License, version 2\n")
+
+def my_version(option, opt, value, parser):
+    """ Print version number & exit """
+    version()
+    sys.exit()
+
+def my_examples(option, opt, value, parser):
+    """ print PIrsynD Usage Examples & exit """
+    print(EXAMPLE_MSG)
+    sys.exit()
+
+def my_action(option, opt, value, parser):
+    """ User has enable -k stop/status action """
+    global PIDFILE
+    # If user has declare a different pidfile
+    if parser.values.PIDFILE :
+        PIDFILE = parser.values.PIDFILE
+    if value == "stop":
+        if os.path.exists(PIDFILE):
+            for line in fileinput.input(PIDFILE):
+                pid = line.strip()
+            try:
+                os.kill(int(pid), signal.SIGKILL)
+                print("pirsyncd with PID: " + pid + " killed successfully")
+            except OSError as ose:
+                print("\nThere was an error: " + ose + "\n")
+            try:
+                os.remove(PIDFILE)
+            except OSError as ose:
+                print("\nThere was an error: " + ose + "\n")
+        else:
+            print("There is no pidfile. Seems there is no running pirsyncd \
+instance.")
+    elif value == "status":
+        if os.path.exists(PIDFILE):
+            for line in fileinput.input(PIDFILE):
+                pid = line.strip()
+            try:
+                os.kill(int(pid), 0)
+                print("There is a running instance of pirsyncd, with PID: " \
++ pid)
+            except OSError as ose:
+                print("\nSomething is wrong! There is a pidfile: " + PIDFILE + \
+" \nbut there isnt any process with PID: " + pid + "\nError: " + ose + "\n")
+        else:
+            print("There is no pidfile. Seems there is no running pirsyncd \
+instance.")
+    else:
+        print("There isnt any action for: " + value + "\nTry ./pirsyncd -h\n")
+    sys.exit()
+
+def mirror():
+    """ This is the part that runs rsync """
+    
+    global COUNTER, FIRST_TIME
+    # Rsync command debugging
+    if FIRST_TIME:
+        COUNTER = 0
+        FIRST_TIME = False
+    if ( COUNTER == 0 ) :
+        # Run rsync !
+        try:
+            retcode = subprocess.call(RSYNC_COMMAND, shell=True)
+            if retcode < 0:
+                print("Child was terminated by signal", -retcode)
+        except OSError as ose:
+            print("Execution failed: ", ose)
+        logging.debug('pirsyncd: ' + RSYNC_COMMAND)
+        COUNTER = INODES - 1 
+        logging.debug("COUNTER: " + str(COUNTER))
+    else :
+        COUNTER -= 1 
+        logging.debug("COUNTER: " + str(COUNTER))
+
+def pirsyncd():
+    """ Configuration of RSYNC_COMMAND upon user arguments & 
+        watching for Kernel Inotify Events on source folder """
+
+    global COUNTER, RSYNC_ARGS, RSYNC_COMMAND, SOURCE_PATH, DEST_PATH, DEST_PORT
+    # Configuration settings are in order
+    if check_config():
+        # Check for trailing slash (/) on source & destination path
+        if SOURCE_PATH[-1] != "/" :
+            SOURCE_PATH += "/"
+        if DEST_PATH[-1] != "/" :
+            DEST_PATH += "/"
+        if ( EXCLUDE_PAT != '' ):
+            RSYNC_ARGS = RSYNC_ARGS + " --exclude=" + EXCLUDE_PAT
+        if ( RSYNC_APPEND != 'False' ):
+            RSYNC_ARGS = RSYNC_ARGS + " --append"
+        if ( MAX_SIZE != '' ):
+            RSYNC_ARGS = RSYNC_ARGS + " --max-size=" + MAX_SIZE
+        if ( MIN_SIZE != '' ):
+            RSYNC_ARGS = RSYNC_ARGS + " --min-size=" + MIN_SIZE
+        if ( RSYNC_V2 != 'False' ):
+            rsync_logfile = ""
+        else :
+            rsync_logfile = "--log-file=" + RSYNC_LOG
+        if ( DEST_SERVER != False ):
+            #Define the ssh port, it have to be numeric and between 1 - 65535
+            port = 22
+            DEST_PORT = re.sub ( "\D", "", DEST_PORT )
+            if len ( DEST_PORT ) > 0 : 
+                if int ( DEST_PORT ) > 0  and int ( DEST_PORT ) < 65536 :
+                    port = int ( DEST_PORT )
+            # Define the rsync command
+            RSYNC_COMMAND = RSYNC_PATH + " " + RSYNC_ARGS + " " + rsync_logfile\
++ " " + SOURCE_PATH + " " + "-e 'ssh -p " +str ( port ) + "' " + DEST_SERVER\
++ ":" + DEST_PATH
+        elif RSYNC_DAEMON != False and RSYNC_PASS_FILE != False :
+            # define rsync command against rsync server
+            RSYNC_COMMAND = RSYNC_PATH + " " + RSYNC_ARGS + " " + rsync_logfile\
++ " " + SOURCE_PATH + " " + RSYNC_DAEMON + " --password-file=" + RSYNC_PASS_FILE
+        else:
+            # define the rsync command
+            RSYNC_COMMAND = RSYNC_PATH + " " + RSYNC_ARGS + " " + rsync_logfile\
++ " " + SOURCE_PATH + " " + DEST_PATH
+
+        print("pirsyncd is starting, waiting for daemonization...")
+        # Try to mirror for the first time, 
+        # perhaps inotify events never occurs to watched directory
+        COUNTER += 1
+        mirror()
+        # monitor for events
+        wmg = pyinotify3.WatchManager()
+        mask =    pyinotify3.IN_ATTRIB | pyinotify3.IN_CLOSE_WRITE | \
+                  pyinotify3.IN_CREATE | pyinotify3.IN_DELETE | \
+                  pyinotify3.IN_MODIFY | pyinotify3.IN_MOVED_TO | \
+                  pyinotify3.IN_MOVED_FROM | pyinotify3.IN_DELETE_SELF
+        ptm = PTmp()
+        notifier = pyinotify3.Notifier(wmg, ptm, read_freq=FREQ)
+        try:
+            if ( EXCLUDE_PAT != '' ):
+                wmg.add_watch( SOURCE_PATH, mask, rec=True, auto_add=True, \
+exclude_filter=pyinotify3.ExcludeFilter(["^" + SOURCE_PATH + EXCLUDE_PAT + "*"]))
+            else:
+                wmg.add_watch( SOURCE_PATH, mask, rec=True, auto_add=True )
+        except pyinotify3.WatchManagerError as err:
+            print(err, err.wmd)
+
+        # Daemonize pirsyncd
+        if ( FOREGROUND != 'False' ):
+            print("Daemon is ready! pirsyncd runs in foreground (ctrl + c) \
+to stop the daemon)\n\n")
+            # Daemonize in foreground
+            notifier.loop ( pid_file = PIDFILE )
+        else:
+            print("Daemon is ready! PIryncD runs in background\ntry \
+./pirsyncd -k status to see the running PID.\n")
+            # Daemonize in background
+            notifier.loop(daemonize=True, pid_file=PIDFILE)
+
+    # Configuration Settings arent in order, print this information message
+    else:
+        print("Please check your configuration settings. Try this: \
+./pirsyncd -h\n")
+        sys.exit(1)
+
+def main( options = getarguments() ):
+    """ Declaration variables with user arguments """
+    
+    global FOREGROUND, RSYNC_APPEND, RSYNC_LOG, DEST_SERVER, DEST_PORT, \
+DEBUG_LOG, SOURCE_PATH, RSYNC_PASS_FILE, RSYNC_V2, RSYNC_PATH, MIN_SIZE, \
+RSYNC_DAEMON, PIDFILE, PIDFILE, MAX_SIZE, DEST_PATH, EXCLUDE_PAT
+
+    # Re-Define variables
+    SOURCE_PATH     = options.SOURCE_PATH
+    DEST_PATH       = options.DEST_PATH
+    DEST_SERVER     = options.DEST_SERVER
+    DEST_PORT		= options.DEST_PORT
+    RSYNC_DAEMON    = options.RSYNC_DAEMON
+    RSYNC_PASS_FILE = options.RSYNC_PASS_FILE
+    RSYNC_PATH      = options.RSYNC_PATH
+    RSYNC_LOG       = options.RSYNC_LOG
+    FOREGROUND      = options.FOREGROUND
+    MAX_SIZE        = options.MAX_SIZE
+    MIN_SIZE        = options.MIN_SIZE
+    DEBUG_LOG       = options.DEBUG_LOG
+    RSYNC_APPEND    = options.rsync_append
+    RSYNC_V2        = options.rsync_v2
+    PIDFILE         = options.PIDFILE
+    EXCLUDE_PAT     = options.EXCLUDE_PAT
+
+    # Logging 
+    logging.basicConfig(filename=DEBUG_LOG, level=logging.DEBUG)
+    
+    # Run pirsyncd
+    pirsyncd()
+
+if __name__ == "__main__":
+    version()
+    main()

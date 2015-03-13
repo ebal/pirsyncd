@@ -1,0 +1,264 @@
+@ Tue Apr 12 21:31:31 EEST 2011
+
+Plz notice that this is the last version in python2
+The next version of piryncd would be only in python3
+
+Pyinotify.py updated to 0.9.1 (20110405)
+
+Added ssh port parameter for synchronize of ssh
+(Feature request by Fred Warren)
+
+Removed trailing slash (/) requirement for source & destination path
+
+Added Pyinotify.py version3 for pirsyncd.Py3k  
+
+@Wed Sep  8 20:45:52 EEST 2010
+
+OptionParser epilog changed to description
+
+Rsync + pyinotify exclude pattern has been added
+
+@Tue Sep  7 20:18:26 EEST 2010
+
+Pyinotify has been updated in version 0.9.0 (20100604)
+
+Rsync option "--safe-links" has been added
+
+@Wed Aug  4 14:31:48 EEST 2010
+
+Rename PIrsyncD to pirsyncd
+
+Print banner at start (version)
+
+Rename PIrsyncD.v3 to pirsyncd.Py3k (for python version 3)
+
+Added epilogue (short description) at -h (or --help)
+
+@Sat Jul 24 12:27:28 EEST 2010
+
+Rewrite code for duplicate inode events, using python dictionary
+
+Added option to run PIryncD in foreground
+
+Added code for mirroring in first run, without looking inode events.
+
+Scoring 7.35 with pylint (better code styling)
+
+Redifind global variables (errors may occured, plz notify me).
+
+@Fri Mar 26 00:29:25 EET 2010
+
+Added Counter variable for inode events (not from command line)
+
+Added code to disable duplicate inode events
+
+@Wed Mar 17 18:17:21 EET 2010
+
+Added Python version 3 based PIrsyncD file: PIrsyncD.v3
+
+Fixing Python Code Styling using pylint (score 7.09)
+Small code fixes
+
+@Wed Mar 10 18:47:15 EET 2010
+
+Added functionality to run multiple instances of PIrsyncD
+Based on Jeff Templon & Jan Just Keijser's patch
+
+Better examples
+
+Better usage message
+
+@Thu Mar  4 23:12:16 EET 2010
+
+Added python regular expression module (import re),
+for argument validation.
+
+Added functionality to rsync over a destination rsync server
+Based on Jeff Templon's patch
+(Suggested by Jeff Templon <templon AT nikhef DOT nl>)
+
+Fallback solution if rsync functionality is failed
+
+Better examples
+
+Better usage message
+
+Changed --host argument from IP value to hostname
+
+TODO file Reviewed
+
+Main program is now 285 lines of actul code always on a KISS philosophy
+
+@Fri Feb 19 12:40:40 EET 2010
+
+Added variable to define the rsync version (parameter: --rsync_v2)
+(Suggestion by Jeff Templon <templon AT nikhef DOT nl>)
+
+Rewrite of INSTALL file.
+
+@Mon Feb 15 21:20:22 EET 2010
+
+Disabling Checking Destination Directory when --host is set
+
+Add rsync append functionality
+
+Better examples
+
+(Suggestions by Jeff Templon <templon AT nikhef DOT nl>)
+
+@Sat Jan  2 18:57:32 EET 2010
+
+Added Disable Logging/Debugging Functionality with
+
+./PIrsyncD --nolog &
+./PIrsyncD --nodebug
+
+Better debugging information (pyinotify events, rsync command)
+
+@Wed Dec 30 22:52:49 EET 2009
+
+Added Debug Logging Functionality 
+(this is extremely useful for debugging pyinotify events)
+default file: /tmp/.PIrsyncDebug
+
+try --help to see more
+
+Added Automatically Learning/Watching functionality for better recursive
+synchronization process
+
+@Sun Nov 15 18:30:45 EET 2009
+
+Add Max-Size & Min-Size exclude functionality
+
+Remove Usage Examples from --help
+Add --examples for Usage Examples
+
+minor code fixes
+
+@Sat Nov 14 20:02:36 EET 2009
+
+update pyinotify.py to latest stable version 0.8.8 (02-Nov-2009)
+
+Add rsync partial functionality
+
+@Wed Sep  2 08:07:28 EEST 2009
+
+update pyinotify.py to latest git version
+
+Add rsync log ability. Very usefull to monitor the rsync process.
+Change rsync arguments: " -azqx --delete-after"
+
+@Sun Aug 23 17:19:06 PDT 2009
+
+This version has a lot of changes and a lot of code rewrites.
+You should try this: ./PIrsyncD -h
+
+Change command line arguments parsing from getopt to optparse
+
+Better examples
+Better usage
+Better help
+
+Check host argument to a valid IP adress (socket module)
+
+Add functionality to stop PIrsyncD
+Add functionality to check if PIrsyncD is running
+
+Better exceptions messages (error handling)
+
+Define rsync command before mirroring
+
+@Tue Aug 18 16:29:03 EEST 2009
+
+Add host argument (--host) to rsync over a destination server
+(needs passwordless connection)
+
+Better examples with --help
+
+define rsync command after parsing arguments
+
+@Fri Jul 24 12:13:25 EEST 2009
+
+The list of inotify events on current version is this:
+
+IN_ATTRIB
+IN_CLOSE_WRITE
+IN_CREATE
+IN_DELETE
+IN_MODIFY
+IN_MOVED_TO
+IN_MOVED_FROM
+IN_DELETE_SELF
+
+From this version, PIrsyncD can hanlde options and arguments.
+The -s & -d bypass the default values
+
+Add Usage function
+
+PIrsyncD [ -s <source> ] [ -d <destination> ] [ -h <help> ] [ -v <version> ]
+
+  -h --help           This is the only help you can get!
+  -s --source         This is the source (watched) directory,
+                        (default value: /tmp/data/).
+  -d --destination    This is the destination (to sync) directory,
+                        (default value: /tmp/data2/).
+  -v --version        Print version and exit
+  
+examples:
+./PIrsyncD -h
+
+./PIrsyncD -v
+
+./PIrsyncD
+
+./PIrsyncD -s /tmp/data -d /tmp/data2
+
+@Wed Jul 15 10:43:50 EEST 2009
+With the use of subprocess module there is no need of the 
+locking mechanism to avoid multiple rsyncs. 
+The inotify events are simple queue to a kernel stack 
+and then rsync just sychronize the directories just with the diffs.
+
+Add IN_ATTRIB inotify event
+
+Change the default delay from 1sec to 0sec
+
+@Tue Jul 14 23:17:11 EEST 2009
+Check for pyinotify module at start
+
+Inotify Events: 
+IN_CLOSE_WRITE
+IN_CREATE
+IN_DELETE
+IN_MODIFY
+IN_MOVED_FROM
+IN_MOVED_TO
+
+Change os.system command with subprocess module
+Add an exception when rsync command fails
+
+Change the default delay from 5sec to 1sec
+
+@Tue Jul 14 16:26:20 EEST 2009
+Rsync directories at the begging of PIrsyncD
+
+Remove lockfile when PIrsyncD starts (maybe PIrsyncD crashed or killed)
+
+Add IN_DELETE inotify to events
+
+Add an expection for add.watch
+
+Add a variable (freq) for delay reading inotify events
+
+@Mon Jul 13 22:53:18 EEST 2009
+Add IN_CREATE along with IN_CLOSE_WRITE events as triggers
+Improve failsafe mechanism to avoid multiple rsync threads
+
+@Mon Jul 13 20:56:04 EEST 2009
+Configuration check
+
+@Mon Jul 13 12:03:09 EEST 2009
+Failsafe locking mechanism to avoid multiple rsync
+
+@Sun Jul 12 22:49:43 EEST 2009
+Python Inotify Rsync Daemon

@@ -1,0 +1,35 @@
+Requirements:
+
+	Python 2.3 or later
+	Python ctypes 1.0.1
+	Libc 2.4
+	Rsync 2 or later
+
+Recommended:
+
+Python v2.7.1
+Rsync  3
+
+Python Issues:
+
+If you use Python 2.3 or Python 2.4 you must install ctypes from here:
+	http://starship.python.net/crew/theller/ctypes/
+
+If you use Python 3.x.x you should use this version of pyinotify:
+	http://trac.dbzteam.org/pyinotify/browser/python3/pyinotify.py
+and you should use pirsyncd.Py3k (not tested)
+
+Rsync Issues:
+
+If you use rsync version 2 you should run this command:
+	./PIrsyncD --rsync_v2
+
+Installation:
+
+Nothing to install, just run  : ./PIrsyncD
+
+Simple usage:
+
+If you want to kill the daemon: ./PIrsyncD -k stop
+If you want to see the PID    : ./PIrsyncD -k status
+See all the help you can get  : ./PIrsyncD -h
