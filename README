@@ -19,10 +19,10 @@ How to fix it:
 	echo 32768 > /proc/sys/fs/inotify/max_queued_events
 
 A mini presentantion is here: 
-	http://ebalaskas.gr/pirsyncd/pyinotify.tbz
+	https://ebalaskas.gr/pirsyncd/pyinotify.tbz
 
 A FAQ page (mostly in greek) is here:
-	http://ebalaskas.gr/wiki/pirsyncd
+	https://ebalaskas.gr/wiki/pirsyncd
 
 Before you start run:
 
