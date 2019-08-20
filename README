@@ -2,7 +2,8 @@ pirsyncd stands for: Python Inotify Rsync Daemon
 
 https://balaskas.gr/blog/?page=pirsyncd
 
-pyinotify.py is from: http://trac.dbzteam.org/pyinotify/wiki
+pyinotify.py home is here: https://github.com/seb-m/pyinotify/wiki
+https://github.com/seb-m/pyinotify
 stable version 0.8.8 (02-Nov-2009)
 
 If you want to see what pyinotify monitors, try this: 
