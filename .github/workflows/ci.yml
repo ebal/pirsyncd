@@ -1,4 +1,6 @@
-# Same commands as on your machine: everything runs in docker compose
+# Same commands as on your machine: everything runs in docker compose.
+# Every push builds a static pirsyncd binary for amd64 and arm64, you can
+# download it from the "Artifacts" of the workflow run.
 name: ci
 
 on:
@@ -6,12 +8,36 @@ on:
   pull_request:
 
 jobs:
-  check:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: gofmt, go vet and go unit tests
+        run: docker compose run --rm test
+      - name: Lint the python end-to-end tests
+        run: docker compose run --rm lint
+
+  build:
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
-        service: [lint, test, test-py39]
+        arch: [amd64, arm64]
     steps:
       - uses: actions/checkout@v5
-      - run: docker compose run --rm ${{ matrix.service }}
+      - name: Build the static binary
+        env:
+          GOARCH: ${{ matrix.arch }}
+        run: |
+          # the version in main.go, plus the git commit: 2.0.0+abc1234
+          VERSION="$(sed -n 's/^var version = "\(.*\)"/\1/p' main.go)+${GITHUB_SHA::7}"
+          export VERSION
+          docker compose run --rm build
+      - name: End-to-end tests with rsync
+        if: matrix.arch == 'amd64'
+        run: docker compose run --rm e2e
+      - uses: actions/upload-artifact@v4
+        with:
+          name: pirsyncd-linux-${{ matrix.arch }}
+          path: dist/pirsyncd
+          if-no-files-found: error
