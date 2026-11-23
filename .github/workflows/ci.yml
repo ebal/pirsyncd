@@ -1,0 +1,17 @@
+# Same commands as on your machine: everything runs in docker compose
+name: ci
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        service: [lint, test, test-py39]
+    steps:
+      - uses: actions/checkout@v5
+      - run: docker compose run --rm ${{ matrix.service }}
