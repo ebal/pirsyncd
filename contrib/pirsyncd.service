@@ -1,0 +1,29 @@
+# systemd unit for pirsyncd
+#
+#   cp pirsyncd /usr/local/bin/pirsyncd
+#   cp contrib/pirsyncd.service /etc/systemd/system/pirsyncd.service
+#   # edit ExecStart: source, destination and options
+#   systemctl daemon-reload
+#   systemctl enable --now pirsyncd
+#   journalctl -u pirsyncd -f
+#
+# pirsyncd runs in foreground (-f), systemd does the rest.
+# For more instances, copy this file with another name and use another pidfile.
+
+[Unit]
+Description=pirsyncd - Python Inotify Rsync Daemon
+Documentation=https://github.com/ebal/pirsyncd
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/pirsyncd -f --nodebug --nolog -s /srv/data -d /backup/data -p /run/pirsyncd/pirsyncd.pid --interval 3600
+RuntimeDirectory=pirsyncd
+Restart=on-failure
+RestartSec=10
+# On stop, pirsyncd runs a last rsync before it exits, give it time
+TimeoutStopSec=600
+
+[Install]
+WantedBy=multi-user.target
