@@ -364,17 +364,16 @@ def read_pid(pidfile):
 
 
 def is_running(pid):
-    """ True if there is a running process with this pid """
+    """ True if there is a running pirsyncd with this pid.
+        We check the command line, because after a crash or a reboot
+        the same pid can belong to another program. """
     if pid <= 0:
         return False
     try:
-        os.kill(pid, 0)
-    except ProcessLookupError:
+        with open("/proc/" + str(pid) + "/cmdline", "rb") as pfile:
+            return b"pirsyncd" in pfile.read()
+    except OSError:
         return False
-    except PermissionError:
-        # It exists, but it is not ours
-        return True
-    return True
 
 
 def remove_pidfile(pidfile):

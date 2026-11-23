@@ -29,7 +29,7 @@ The older, date based versions (up to `20110412`) are in
   talks to the kernel inotify directly (no pyinotify).
 - `-k stop` stops pirsyncd with `SIGTERM` (was `SIGKILL`) and waits for it.
 - `-k` works with `-p` in any order.
-- A stale pidfile (no running process) no longer blocks the start.
+- A stale pidfile (no running pirsyncd) no longer blocks the start.
 - `--port` must be a number from 1 to 65535 (was silently 22).
 - The `--host` name is no longer resolved at start, so pirsyncd also starts
   when the DNS is not ready yet.
@@ -55,5 +55,7 @@ The older, date based versions (up to `20110412`) are in
 ### Security
 - Run rsync without a shell, so source or destination paths can not run
   shell commands.
+- `-k stop` only stops a real pirsyncd: a stale pidfile with a pid that now
+  belongs to another program no longer kills that program.
 
 [unreleased]: https://github.com/ebal/pirsyncd/compare/e2fa36d...HEAD

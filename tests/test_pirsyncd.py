@@ -151,9 +151,18 @@ class TestCheckConfig(unittest.TestCase):
                                          "--rsync_pass_file", secrets)), 1)
 
     def test_running_instance(self):
-        # our own pid is a running process
-        write(os.path.join(self.tmp.name, "pid"), str(os.getpid()))
+        # a process with pirsyncd in its command line
+        sleeper = subprocess.Popen([sys.executable, "-c",
+                                    "import time; time.sleep(30)", "pirsyncd"])
+        self.addCleanup(sleeper.wait)
+        self.addCleanup(sleeper.kill)
+        write(os.path.join(self.tmp.name, "pid"), str(sleeper.pid))
         self.assertEqual(len(self.errors()), 1)
+
+    def test_pid_of_another_program_is_ok(self):
+        # the pid was reused by another program (this test), not pirsyncd
+        write(os.path.join(self.tmp.name, "pid"), str(os.getpid()))
+        self.assertEqual(self.errors(), [])
 
     def test_stale_pidfile_is_ok(self):
         write(os.path.join(self.tmp.name, "pid"), "999999999")
