@@ -1,0 +1,2 @@
+# build output: docker compose run --rm build
+dist/

@@ -1,35 +1,76 @@
 # Everything runs inside docker, nothing is installed on your machine.
 #
-#   docker compose run --rm test        # tests with the latest python
-#   docker compose run --rm test-py39   # tests with the oldest python we support
-#   docker compose run --rm lint        # ruff linter
+#   docker compose run --rm build   # static binary: dist/pirsyncd
+#   docker compose run --rm test    # gofmt, go vet and go unit tests
+#   docker compose run --rm e2e     # end-to-end tests of dist/pirsyncd with rsync
+#   docker compose run --rm lint    # ruff linter for the python test file
 #
-# These are one shot jobs (run the tests and exit), not long running services,
+# These are one shot jobs (build or test and exit), not long running services,
 # so there is nothing to probe with a healthcheck: healthcheck is disabled.
 
-x-test: &test
-  # tini as PID 1 reaps the background daemon, like init does on a real system
-  init: true
-  working_dir: /src
-  volumes:
-    - .:/src:ro
-  environment:
-    PYTHONDONTWRITEBYTECODE: "1"
-  command:
-    - sh
-    - -c
-    - apk add --no-cache --quiet rsync && python -m unittest discover -s tests -v
-  healthcheck:
-    disable: true
-
 services:
-  test:
-    <<: *test
-    image: python:3.14-alpine
+  build:
+    image: golang:1.27-alpine
+    working_dir: /src
+    volumes:
+      - .:/src
+    environment:
+      # static binary, no C library needed
+      CGO_ENABLED: "0"
+      GOFLAGS: "-buildvcs=false"
+      VERSION: ${VERSION:-}
+      # target cpu: amd64, arm64, ... (empty: the same as this machine)
+      GOARCH: ${GOARCH:-}
+    command:
+      - sh
+      - -c
+      - |
+        set -e
+        ldflags="-s -w"
+        if [ -n "$$VERSION" ]; then ldflags="$$ldflags -X main.version=$$VERSION"; fi
+        go build -trimpath -ldflags "$$ldflags" -o dist/pirsyncd .
+        # the files belong to you, not to root
+        chown -R "$$(stat -c %u:%g /src)" dist
+        ls -l dist/pirsyncd
+        # we can run it only when it is for this cpu
+        if [ "$$(go env GOARCH)" = "$$(go env GOHOSTARCH)" ]; then ./dist/pirsyncd -v; fi
+    healthcheck:
+      disable: true
 
-  test-py39:
-    <<: *test
-    image: python:3.9-alpine
+  test:
+    image: golang:1.27-alpine
+    working_dir: /src
+    volumes:
+      - .:/src:ro
+    environment:
+      GOFLAGS: "-buildvcs=false"
+    command:
+      - sh
+      - -c
+      - |
+        set -e
+        unformatted="$$(gofmt -l .)"
+        if [ -n "$$unformatted" ]; then echo "run gofmt -w on: $$unformatted"; exit 1; fi
+        go vet ./...
+        go test -v ./...
+    healthcheck:
+      disable: true
+
+  e2e:
+    image: python:3.14-alpine
+    # tini as PID 1 reaps the background daemon, like init does on a real system
+    init: true
+    working_dir: /src
+    volumes:
+      - .:/src:ro
+    environment:
+      PYTHONDONTWRITEBYTECODE: "1"
+    command:
+      - sh
+      - -c
+      - apk add --no-cache --quiet rsync && python -m unittest discover -s tests -v
+    healthcheck:
+      disable: true
 
   lint:
     image: ghcr.io/astral-sh/ruff:0.17.6
@@ -38,6 +79,6 @@ services:
       - .:/src:ro
     environment:
       RUFF_NO_CACHE: "true"
-    command: ["check", "pirsyncd", "tests"]
+    command: ["check", "tests"]
     healthcheck:
       disable: true
