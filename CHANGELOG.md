@@ -22,11 +22,12 @@ The older, date based versions (up to `20110412`) are in
 - Watch new and moved-in directories, and rescan the tree after an inotify
   queue overflow.
 - Add a systemd unit in `contrib/pirsyncd.service`.
-- Add tests and a linter that run in docker (`docker compose run --rm test`).
+- Add unit and end-to-end tests that run in docker (`docker compose run --rm test`).
 
 ### Changed
-- Require Python 3.9 or newer. pirsyncd uses only the standard library, it
-  talks to the kernel inotify directly (no pyinotify).
+- Rewrite pirsyncd in Go: one static binary for linux amd64 and arm64, it
+  needs only rsync (no python, no pyinotify). The options are the same.
+- Build the binaries on GitHub Actions for every push.
 - `-k stop` stops pirsyncd with `SIGTERM` (was `SIGKILL`) and waits for it.
 - `-k` works with `-p` in any order.
 - A stale pidfile (no running pirsyncd) no longer blocks the start.
@@ -40,7 +41,7 @@ The older, date based versions (up to `20110412`) are in
 - Convert README, INSTALL and Changelog to `README.md` and `CHANGELOG.md`.
 
 ### Removed
-- Remove Python 2 support and `pirsyncd.Py3k`.
+- Remove the python script (python 2 and `pirsyncd.Py3k`).
 - Remove the vendored `pyinotify.py` and `pyinotify3.py`.
 - Remove the inode event counter (`INODES`), replaced by `--delay`.
 

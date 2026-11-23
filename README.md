@@ -8,8 +8,8 @@ keep a second directory (local, over ssh, or on an rsync server) in sync.
 It is a poor man's mirroring: a simple, near real time data replication
 without a cluster file system.
 
-pirsyncd is one small python 3 script. It needs only the python standard
-library and rsync, nothing to install with pip.
+pirsyncd is one small static binary written in Go (it was python, the name
+stays). It needs only rsync on the machine, nothing else.
 
 ![CI](https://img.shields.io/github/actions/workflow/status/ebal/pirsyncd/ci.yml)
 ![License](https://img.shields.io/github/license/ebal/pirsyncd)
@@ -28,24 +28,35 @@ library and rsync, nothing to install with pip.
 
 ### Requirements
 
-- Linux (inotify)
-- Python 3.9 or newer
+- Linux (inotify), amd64 or arm64
 - rsync (version 3 recommended, for `--log-file`)
 - ssh, for rsync over ssh (`--host`)
 
+### Download the binary
+
+Every push builds static binaries on GitHub Actions. Open the latest
+[ci workflow run](https://github.com/ebal/pirsyncd/actions/workflows/ci.yml)
+and download `pirsyncd-linux-amd64` or `pirsyncd-linux-arm64` from
+*Artifacts*. Then:
+
+```bash
+unzip pirsyncd-linux-amd64.zip
+install -m 0755 pirsyncd /usr/local/bin/pirsyncd
+pirsyncd -v
+```
+
 ### From source
+
+You need only docker, the build runs in the official golang image:
 
 ```bash
 git clone https://github.com/ebal/pirsyncd.git
 cd pirsyncd
-./pirsyncd -h
+docker compose run --rm build      # creates dist/pirsyncd
+./dist/pirsyncd -h
 ```
 
-Nothing else to install. To install it system wide:
-
-```bash
-install -m 0755 pirsyncd /usr/local/bin/pirsyncd
-```
+For another cpu: `GOARCH=arm64 docker compose run --rm build`.
 
 ### systemd
 
@@ -65,7 +76,7 @@ Sync a local directory to another local directory, in foreground:
 
 ```bash
 mkdir -p /tmp/data /tmp/data2
-./pirsyncd -f -s /tmp/data/ -d /tmp/data2/
+pirsyncd -f -s /tmp/data/ -d /tmp/data2/
 ```
 
 ```
@@ -78,9 +89,9 @@ pirsyncd runs in foreground (ctrl + c to stop the daemon)
 Run it in background, check it and stop it:
 
 ```bash
-./pirsyncd -s /tmp/data/ -d /tmp/data2/
-./pirsyncd -k status
-./pirsyncd -k stop
+pirsyncd -s /tmp/data/ -d /tmp/data2/
+pirsyncd -k status
+pirsyncd -k stop
 ```
 
 ```
@@ -165,22 +176,29 @@ See all the options and more examples:
 
 ## Development
 
-Everything runs in docker, you do not need python or rsync on your machine:
+Everything runs in docker, you do not need go, python or rsync on your
+machine:
 
 ```bash
-docker compose run --rm test        # tests with the latest python
-docker compose run --rm test-py39   # tests with the oldest supported python
-docker compose run --rm lint        # ruff linter
+docker compose run --rm build   # static binary: dist/pirsyncd
+docker compose run --rm test    # gofmt, go vet and go unit tests
+docker compose run --rm e2e     # end-to-end tests of dist/pirsyncd with rsync
+docker compose run --rm lint    # ruff linter for the python test file
 ```
 
-The tests are in [tests/test_pirsyncd.py](./tests/test_pirsyncd.py). They
-use only `unittest` and run the real pirsyncd with the real rsync.
+The code is in four small files: [main.go](./main.go) (options, pidfile,
+daemon), [inotify.go](./inotify.go) (watches), [rsync.go](./rsync.go)
+(rsync and the main loop) and [main_test.go](./main_test.go) (unit tests).
+Only the Go standard library is used.
+
+The end-to-end tests in [tests/test_pirsyncd.py](./tests/test_pirsyncd.py)
+run the real binary with the real rsync, using only the command line.
 
 ## Contributing
 
-Pull requests are welcome. Please keep it simple (one script, standard
-library only), add a test for your change, and run the three docker commands
-above before you send it. Commit messages follow
+Pull requests are welcome. Please keep it simple (standard library only),
+add a test for your change, and run the docker commands above before you
+send it. Commit messages follow
 [Conventional Commits](https://www.conventionalcommits.org/).
 
 ## Support
