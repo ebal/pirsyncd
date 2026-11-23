@@ -277,6 +277,7 @@ class TestDaemon(unittest.TestCase):
         result = subprocess.run(self.args(), capture_output=True, text=True,
                                 timeout=15)
         self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("runs in background", result.stdout)
         self.assertTrue(wait_for(lambda: os.path.exists(self.pid)))
 
         status = subprocess.run([sys.executable, SCRIPT, "-p", self.pid,

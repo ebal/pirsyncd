@@ -462,25 +462,30 @@ def getarguments(argv=None):
         help="Print version and exit")
     parser.add_argument("-s", "--source",
         dest="SOURCE_PATH",
+        metavar="DIR",
         default=SOURCE_PATH,
         help="This is the source (watched) directory. (default: %(default)s)")
     parser.add_argument("-d", "--destination",
         dest="DEST_PATH",
+        metavar="DIR",
         default=DEST_PATH,
         help="This is the destination (to sync) directory. "
              "(default: %(default)s)")
     parser.add_argument("-p", "--pidfile",
         dest="PIDFILE",
+        metavar="FILE",
         default=PIDFILE,
         help="Full path of file contains the PID of the running instance. "
              "Use a different pidfile for every instance of pirsyncd. "
              "(default: %(default)s)")
     parser.add_argument("-r", "--rsync",
         dest="RSYNC_PATH",
+        metavar="FILE",
         default=RSYNC_PATH,
         help="Full path of rsync command. (default: %(default)s)")
     parser.add_argument("-l", "--log",
         dest="RSYNC_LOG",
+        metavar="FILE",
         default=RSYNC_LOG,
         help="Full path of rsync log file. (default: %(default)s)")
     parser.add_argument("--nolog",
@@ -495,6 +500,7 @@ def getarguments(argv=None):
              "(logs are also printed on screen)")
     parser.add_argument("--debug",
         dest="DEBUG_LOG",
+        metavar="FILE",
         default=DEBUG_LOG,
         help="Full path of pirsyncd log file. (default: %(default)s)")
     parser.add_argument("--nodebug",
@@ -513,52 +519,62 @@ def getarguments(argv=None):
         help="Disable rsync version 3 functionality (eg. log-file)")
     parser.add_argument("--host",
         dest="DEST_SERVER",
+        metavar="HOST",
         default="",
         help="Enable rsync over ssh. You must define a destination server "
              "with passwordless (ssh key) connection.")
     parser.add_argument("--port",
         dest="DEST_PORT",
+        metavar="PORT",
         type=int,
         default=DEST_PORT,
         help="Define the destination ssh port, only with --host "
              "(default: %(default)s)")
     parser.add_argument("--rsync_daemon",
         dest="RSYNC_DAEMON",
+        metavar="HOST::MODULE",
         default="",
         help="Enable rsync over native rsync protocol. Valid argument is of "
              "form host::module. If --host is set, then --rsync_daemon is "
              "disabled.")
     parser.add_argument("--rsync_pass_file",
         dest="RSYNC_PASS_FILE",
+        metavar="FILE",
         default="",
         help="Name of password file to be used in combination with rsync "
              "daemon mode (--rsync_daemon).")
     parser.add_argument("--max_size",
         dest="MAX_SIZE",
+        metavar="SIZE",
         default="",
         help="Exclude files larger than this size from synchronization.")
     parser.add_argument("--min_size",
         dest="MIN_SIZE",
+        metavar="SIZE",
         default="",
         help="Exclude files smaller than this size from synchronization.")
     parser.add_argument("--exclude_pattern",
         dest="EXCLUDE_PAT",
+        metavar="PATTERN",
         default="",
         help="Exclude pattern from rsync and inotify watch.")
     parser.add_argument("--delay",
         dest="DELAY",
+        metavar="SECONDS",
         type=float,
         default=DELAY,
         help="Run rsync after DELAY seconds without new events. "
              "(default: %(default)s)")
     parser.add_argument("--max_delay",
         dest="MAX_DELAY",
+        metavar="SECONDS",
         type=float,
         default=MAX_DELAY,
         help="Run rsync at least every MAX_DELAY seconds while events keep "
              "coming. (default: %(default)s)")
     parser.add_argument("--interval",
         dest="INTERVAL",
+        metavar="SECONDS",
         type=float,
         default=INTERVAL,
         help="Run a full rsync every INTERVAL seconds, even without events. "
@@ -648,10 +664,13 @@ def pirsyncd(options):
     watch_tree(inotify, options.SOURCE_PATH, options)
 
     if options.FOREGROUND:
-        print("pirsyncd runs in foreground (ctrl + c to stop the daemon)")
+        print("pirsyncd runs in foreground (ctrl + c to stop the daemon)",
+              flush=True)
     else:
         print("pirsyncd runs in background, "
               "try: pirsyncd -p " + options.PIDFILE + " -k status")
+        # print the messages now, before the fork
+        sys.stdout.flush()
         daemonize()
 
     setup_logging(options)
