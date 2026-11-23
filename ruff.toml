@@ -1,0 +1,9 @@
+# ruff linter settings: docker compose run --rm lint
+target-version = "py39"
+line-length = 88
+
+[lint]
+# pycodestyle, pyflakes, bugbear, simplify, pyupgrade
+select = ["E", "W", "F", "B", "SIM", "UP"]
+# try / except / pass is easier to read than contextlib.suppress()
+ignore = ["SIM105"]

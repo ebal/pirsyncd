@@ -1,0 +1,43 @@
+# Everything runs inside docker, nothing is installed on your machine.
+#
+#   docker compose run --rm test        # tests with the latest python
+#   docker compose run --rm test-py39   # tests with the oldest python we support
+#   docker compose run --rm lint        # ruff linter
+#
+# These are one shot jobs (run the tests and exit), not long running services,
+# so there is nothing to probe with a healthcheck: healthcheck is disabled.
+
+x-test: &test
+  # tini as PID 1 reaps the background daemon, like init does on a real system
+  init: true
+  working_dir: /src
+  volumes:
+    - .:/src:ro
+  environment:
+    PYTHONDONTWRITEBYTECODE: "1"
+  command:
+    - sh
+    - -c
+    - apk add --no-cache --quiet rsync && python -m unittest discover -s tests -v
+  healthcheck:
+    disable: true
+
+services:
+  test:
+    <<: *test
+    image: python:3.14-alpine
+
+  test-py39:
+    <<: *test
+    image: python:3.9-alpine
+
+  lint:
+    image: ghcr.io/astral-sh/ruff:0.17.6
+    working_dir: /src
+    volumes:
+      - .:/src:ro
+    environment:
+      RUFF_NO_CACHE: "true"
+    command: ["check", "pirsyncd", "tests"]
+    healthcheck:
+      disable: true
